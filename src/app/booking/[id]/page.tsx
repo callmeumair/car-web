@@ -1,7 +1,87 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import Link from 'next/link';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export default function BookingPage({ params }: { params: { id: string } }) {
+  return (
+    <Elements stripe={stripePromise}>
+      <BookingForm carId={params.id} />
+    </Elements>
+  );
+}
+
+function BookingForm({ carId }: { carId: string }) {
+  const router = useRouter();
+  const stripe = useStripe();
+  const elements = useElements();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const data = {
+        firstName: formData.get('firstName'),
+        lastName: formData.get('lastName'),
+        email: formData.get('email'),
+        phone: formData.get('phone'),
+        startDate: formData.get('startDate'),
+        endDate: formData.get('endDate'),
+        pickupLocation: formData.get('pickupLocation'),
+      };
+
+      // Create payment method
+      const { error: stripeError, paymentMethod } = await stripe.createPaymentMethod({
+        type: 'card',
+        card: elements.getElement(CardElement)!,
+      });
+
+      if (stripeError) {
+        throw new Error(stripeError.message);
+      }
+
+      // Submit booking
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carId,
+          userId: 'current-user-id', // Replace with actual user ID
+          startDate: data.startDate,
+          endDate: data.endDate,
+          pickupLocation: data.pickupLocation,
+          paymentMethodId: paymentMethod.id,
+          depositAmount: 100, // Example deposit amount
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Booking failed');
+      }
+
+      // Redirect to success page
+      router.push('/booking/success');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -11,7 +91,13 @@ export default function BookingPage({ params }: { params: { id: string } }) {
             <div className="bg-white p-6 rounded-lg shadow-lg">
               <h1 className="text-2xl font-bold mb-6">Complete Your Booking</h1>
               
-              <form className="space-y-6">
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-6">
                 {/* Personal Information */}
                 <div>
                   <h2 className="text-lg font-semibold mb-4">Personal Information</h2>
@@ -20,6 +106,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                       <input
                         type="text"
+                        name="firstName"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
@@ -28,6 +115,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                       <input
                         type="text"
+                        name="lastName"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
@@ -37,6 +125,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                     <input
                       type="email"
+                      name="email"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                       required
                     />
@@ -45,6 +134,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
                     <input
                       type="tel"
+                      name="phone"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                       required
                     />
@@ -59,6 +149,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Date</label>
                       <input
                         type="date"
+                        name="startDate"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
@@ -67,6 +158,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Return Date</label>
                       <input
                         type="date"
+                        name="endDate"
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                         required
                       />
@@ -74,7 +166,11 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                   </div>
                   <div className="mt-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Pickup Location</label>
-                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                    <select
+                      name="pickupLocation"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    >
                       <option value="">Select Location</option>
                       <option value="airport">Airport</option>
                       <option value="downtown">Downtown Office</option>
@@ -86,42 +182,32 @@ export default function BookingPage({ params }: { params: { id: string } }) {
                 {/* Payment Information */}
                 <div>
                   <h2 className="text-lg font-semibold mb-4">Payment Information</h2>
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Card Number</label>
-                    <input
-                      type="text"
-                      placeholder="1234 5678 9012 3456"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      required
+                  <div className="p-4 border border-gray-300 rounded-lg">
+                    <CardElement
+                      options={{
+                        style: {
+                          base: {
+                            fontSize: '16px',
+                            color: '#424770',
+                            '::placeholder': {
+                              color: '#aab7c4',
+                            },
+                          },
+                          invalid: {
+                            color: '#9e2146',
+                          },
+                        },
+                      }}
                     />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Expiry Date</label>
-                      <input
-                        type="text"
-                        placeholder="MM/YY"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">CVV</label>
-                      <input
-                        type="text"
-                        placeholder="123"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                        required
-                      />
-                    </div>
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors"
+                  disabled={loading}
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  Complete Booking
+                  {loading ? 'Processing...' : 'Complete Booking'}
                 </button>
               </form>
             </div>
@@ -135,7 +221,7 @@ export default function BookingPage({ params }: { params: { id: string } }) {
               <div className="flex items-center mb-6">
                 <div className="relative w-24 h-16 mr-4">
                   <Image
-                    src={`/car-${params.id}.jpg`}
+                    src={`/car-${carId}.jpg`}
                     alt="Car"
                     fill
                     className="object-cover rounded-lg"
