@@ -35,7 +35,7 @@ export default function AboutPage() {
                 Founded in 2010, CarRental has grown from a small local business to a leading car rental service provider. Our journey began with a simple mission: to provide reliable, affordable, and high-quality vehicles to our customers.
               </p>
               <p className="text-gray-600 mb-4">
-                Over the years, we've expanded our fleet, improved our services, and built lasting relationships with our customers. Today, we're proud to offer a wide range of vehicles to suit every need and budget.
+                Over the years, we&apos;ve expanded our fleet, improved our services, and built lasting relationships with our customers. Today, we&apos;re proud to offer a wide range of vehicles to suit every need and budget.
               </p>
               <p className="text-gray-600">
                 Our commitment to customer satisfaction and quality service has earned us numerous awards and recognition in the industry.
